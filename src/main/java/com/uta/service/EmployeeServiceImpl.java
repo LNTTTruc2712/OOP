@@ -1,6 +1,7 @@
 package com.uta.service;
 
 import com.uta.model.Employee;
+import com.uta.search.SearchEngine;
 import com.uta.specification.Specification;
 import com.uta.specification.employee.NameContainsSpec;
 
@@ -13,28 +14,39 @@ import java.util.stream.Collectors;
 
 public class EmployeeServiceImpl implements EmployeeService {
     private final Map<String, Employee> employeeMap = new HashMap<>();
+    private SearchEngine<Employee> searchEngine;
+
+    public EmployeeServiceImpl() {
+        this.searchEngine = new SearchEngine<>(new ArrayList<>());
+    }
 
     @Override
     public boolean add(Employee employee) {
-        if (employeeMap.containsKey(employee.getId())) {
+        if (employee == null || employeeMap.containsKey(employee.getId())) {
             return false;
         }
         employeeMap.put(employee.getId(), employee);
+        updateSearchEngine();
         return true;
     }
 
     @Override
     public boolean update(Employee employee) {
-        if (employeeMap.containsKey(employee.getId())) {
-            employeeMap.put(employee.getId(), employee);
-            return true;
+        if (employee == null || !employeeMap.containsKey(employee.getId())) {
+            return false;
         }
-        return false;
+        employeeMap.put(employee.getId(), employee);
+        updateSearchEngine();
+        return true;
     }
 
     @Override
     public boolean removeById(String id) {
-        return employeeMap.remove(id) != null;
+        if (employeeMap.remove(id) != null) {
+            updateSearchEngine();
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -44,23 +56,17 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     @Override
     public Employee findHighestSalaryEmployee() {
-        return employeeMap.values().stream()
-                .max(Comparator.comparingDouble(Employee::calculateSalary))
-                .orElse(null);
+        return searchEngine.findMax(Comparator.comparingDouble(Employee::calculateSalary));
     }
 
+    @Override
     public Employee findLowestSalaryEmployee() {
-        return employeeMap.values().stream()
-                .min(Comparator.comparingDouble(Employee::calculateSalary))
-                .orElse(null);
+        return searchEngine.findMin(Comparator.comparingDouble(Employee::calculateSalary));
     }
 
     @Override
     public List<Employee> findByName(String name) {
-        Specification<Employee> spec = new NameContainsSpec(name);
-        return employeeMap.values().stream()
-                .filter(spec::isSatisfiedBy)
-                .collect(Collectors.toList());
+        return searchEngine.search(new NameContainsSpec(name));
     }
 
     @Override
@@ -74,14 +80,12 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     @Override
     public List<Employee> getAll() {
-        return new ArrayList<>(employeeMap.values());
+        return searchEngine.searchAll(null, 0, Integer.MAX_VALUE);
     }
 
     @Override
     public List<Employee> search(Specification<Employee> specification) {
-        return employeeMap.values().stream()
-                .filter(specification::isSatisfiedBy)
-                .collect(Collectors.toList());
+        return searchEngine.search(specification);
     }
 
     @Override
@@ -89,5 +93,9 @@ public class EmployeeServiceImpl implements EmployeeService {
         return employeeMap.values().stream()
                 .mapToDouble(Employee::calculateSalary)
                 .sum();
+    }
+
+    private void updateSearchEngine() {
+        this.searchEngine = new SearchEngine<>(new ArrayList<>(employeeMap.values()));
     }
 }
